@@ -1,29 +1,28 @@
+import {service} from '@loopback/core';
 import {
   Count,
   CountSchema,
   Filter,
   FilterExcludingWhere,
   repository,
-  Where,
+  Where
 } from '@loopback/repository';
 import {
-  post,
-  param,
-  get,
-  getModelSchemaRef,
-  patch,
-  put,
-  del,
-  requestBody,
-  response,
+  del, get,
+  getModelSchemaRef, param, patch, post, put, requestBody,
+  response
 } from '@loopback/rest';
 import {Persona} from '../models';
 import {PersonaRepository} from '../repositories';
+import {AutenticacionService} from '../services';
+
 
 export class PersonaController {
   constructor(
     @repository(PersonaRepository)
     public personaRepository : PersonaRepository,
+    @service(AutenticacionService)
+    public servicioAutenticacion: AutenticacionService
   ) {}
 
   @post('/personas')
@@ -44,8 +43,37 @@ export class PersonaController {
     })
     persona: Omit<Persona, 'id'>,
   ): Promise<Persona> {
-    return this.personaRepository.create(persona);
+
+ const clave = this.servicioAutenticacion.generarclave();
+ const clavecifrada = this.servicioAutenticacion.cifrarclave(clave);
+ persona.clave= clavecifrada;
+
+     const p = await this.personaRepository.create(persona);
+     const destino = persona.correo;
+     const asunto = 'Registro en la plataforma';
+     const contenido = `Hola ${persona.nombres}, su nombre de usuario es: ${persona.correo} y tu contraseña es: ${clave} `;
+     const fetchUrl = `http://127.0.0.1:5000/envio-correo?correo-destino=${destino}&asunto=${asunto}&contenido=${contenido}`;
+
+     // eslint-disable-next-line no-unused-expressions
+     (async () => {
+       try {
+         // eslint-disable-next-line no-void
+         void import('node-fetch').then(async function ({default: fetch}) {
+             return fetch(fetchUrl).then((data:any) => console.log(data));
+           }).catch();
+       } catch (error) {
+         if (error.name === 'ERR_REQUIRE_ESM') {
+           console.log('request was aborted');
+         }
+         console.log(error.message)
+       }
+     });
+
+     return p;
+
+
   }
+
 
   @get('/personas/count')
   @response(200, {
